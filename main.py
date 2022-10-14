@@ -1,5 +1,7 @@
 # TimerX v1.1
 # IMPORTS
+import pyautogui
+
 ver = "1.1"
 
 import time
@@ -8,8 +10,8 @@ import webbrowser
 from pathlib import Path
 from platform import system
 from threading import Thread
-from tkinter import Frame, PhotoImage, Tk, ttk
-from tkinter.constants import DISABLED, END, LEFT
+from tkinter import Frame, Tk
+from tkinter.constants import DISABLED, END, LEFT, NORMAL
 from tkinter.filedialog import askopenfile
 
 import darkdetect
@@ -37,10 +39,12 @@ if config["theme"] == "System":
 # TKINTER WINDOW
 app = Tk()
 app.title("")
-app.minsize(width=300, height=210)
+app.minsize(width=50, height=50)
+app.wm_geometry("182x120")
 
 sv_ttk.set_theme(theme.lower())
 bg_color = ttk.Style().lookup(".", "background")
+
 
 # SYSTEM CODE
 def seticon(win):
@@ -87,54 +91,141 @@ app_on = True
 
 timer_on = False
 timer_paused = False
+timer_stopped = False
 
 timer_seconds = int(config["default_seconds"])
 timer_minutes = int(config["default_minutes"])
 timer_hours = int(config["default_hours"])
+
 
 # FUNCTIONS
 def playBuzzer():
     playsound(config["sound_path"])
 
 
-def startstopButtonPressed(*_):
-    global timer_on, timer_paused, timer_hours, timer_minutes, timer_seconds, last_paused
+def stopTimerAndSetNewValue(hours: int, minutes: int, seconds: int):
+    global hours_left, minutes_left, seconds_left, timer_seconds, timer_minutes, timer_hours, timer_stopped
 
-    if timer_on and not timer_paused:
+    config["default_seconds"] = seconds
+    config["default_minutes"] = minutes
+    config["default_hours"] = hours
+
+    saveConfig(config)
+
+    timer_seconds = hours
+    timer_minutes = minutes
+    timer_hours = seconds
+
+    hours_left = timer_hours
+    minutes_left = timer_minutes
+    seconds_left = timer_seconds
+
+    if timer_on:
+        timer_stopped = True
+
+    time_display.configure(text=f"{hours_left:02d} : {minutes_left:02d} : {seconds_left:02d}")
+
+
+def buttonPressedReset(*_):
+    stopTimerAndSetNewValue(int(config["default_hours"]), int(config["default_minutes"]), int(config["default_seconds"]))
+
+
+def buttonPressedFast1(*_):
+    stopTimerAndSetNewValue(0, 5, 0)
+
+
+def buttonPressedFast2(*_):
+    stopTimerAndSetNewValue(0, 25, 0)
+
+
+def buttonPressedFast3(*_):
+    stopTimerAndSetNewValue(0, 10, 0)
+
+
+def buttonPressedFast4(*_):
+    stopTimerAndSetNewValue(0, 15, 0)
+
+
+def buttonPressedStartStop(*_):
+    global timer_on, timer_hours, timer_minutes, timer_seconds, last_paused, timer_stopped, hours_left, minutes_left, seconds_left
+
+    if timer_on:
         timer_on = False
-        timer_paused = True
-        last_paused = time.time()
+        timer_stopped = True
         timer_hours = hours_left
         timer_minutes = minutes_left
         timer_seconds = seconds_left
+        reset_button.configure(state=NORMAL)
+        edit_timer_button.configure(state=NORMAL)
+        fast1_button.configure(state=NORMAL)
+        fast2_button.configure(state=NORMAL)
+        fast3_button.configure(state=NORMAL)
+        fast4_button.configure(state=NORMAL)
         play_button.configure(text="Play")
-    elif not timer_paused and not timer_on:
-        play_button.configure(text="Pause")
+    else:
+        play_button.configure(text="Stop")
+        hours_left = timer_hours
+        minutes_left = timer_minutes
+        seconds_left = timer_seconds
+        edit_timer_button.configure(state=DISABLED)
+        reset_button.configure(state=DISABLED)
+        fast1_button.configure(state=DISABLED)
+        fast2_button.configure(state=DISABLED)
+        fast3_button.configure(state=DISABLED)
+        fast4_button.configure(state=DISABLED)
         timer_thread = Thread(target=runTimer, daemon=True)
         timer_thread.start()
-    else:
-        timer_paused = False
-        timer_on = True
-        play_button.configure(text="Pause")
+        anti_screen_locker_thread = Thread(target=runAntiScreenLocker, daemon=True)
+        anti_screen_locker_thread.start()
+
+
+def runAntiScreenLocker():
+    while True:
+        if not timer_on:
+            break;
+        pyautogui.move(1, 1)
+        time.sleep(30)
+        pyautogui.move(-1, -1)
+        time.sleep(30)
 
 
 def saveTimer(secs, mins, hours, manager_app_window):
-    global timer_seconds, timer_minutes, timer_hours
+    global timer_seconds, timer_minutes, timer_hours, hours_left, minutes_left, seconds_left, config
 
     timer_seconds = int(secs)
     timer_minutes = int(mins)
     timer_hours = int(hours)
 
+    hours_left = timer_hours
+    minutes_left = timer_minutes
+    seconds_left = timer_seconds
+
     time_selected_display.configure(
-        text=f"{hours} Hours, {mins} Minutes, {secs} Seconds"
+        text=f"{hours_left:02d} Hours, {minutes_left:02d} Minutes, {seconds_left:02d} Seconds"
     )
-    time_display.configure(text=f"{hours} : {mins} : {secs}")
+    time_display.configure(text=f"{hours_left:02d} : {minutes_left:02d} : {seconds_left:02d}")
+
+    config["default_seconds"] = timer_seconds
+    config["default_minutes"] = timer_minutes
+    config["default_hours"] = timer_hours
+
+    saveConfig(config)
 
     if not manager_app_window == None:
         manager_app_window.destroy()
 
 
+import subprocess
+
+
+def sendmessage(summary, body):
+    subprocess.Popen(['notify-send', "-t", "5000", summary, body])
+    return
+
+
 def showNotification():
+    sendmessage("TimerX", "Time's up!")
+
     if system() == "Windows":
         notification = ToastNotifier()
         notification.show_toast(
@@ -148,22 +239,30 @@ def showNotification():
 
 
 def runTimer():
-    global timer_seconds, timer_minutes, timer_hours, timer_on, app, config, last_paused, seconds_left, minutes_left, hours_left
+    global timer_seconds, timer_minutes, timer_hours, timer_on, app, config, last_paused, seconds_left, minutes_left, hours_left, timer_stopped
 
-    timer_seconds = config["default_seconds"]
-    timer_minutes = config["default_minutes"]
-    timer_hours = config["default_hours"]
+    # timer_seconds = config["default_seconds"]
+    # timer_minutes = config["default_minutes"]
+    # timer_hours = config["default_hours"]
 
-    seconds_left = timer_seconds
-    minutes_left = timer_minutes
-    hours_left = timer_hours
+    timer_hours = hours_left
+    timer_minutes = minutes_left
+    timer_seconds = seconds_left
+
+    # seconds_left = timer_seconds
+    # minutes_left = timer_minutes
+    # hours_left = timer_hours
     milliseconds_left = 99
     timer_on = True
 
     last_paused = time.time()
 
     while True:
-        if timer_on and not timer_paused:
+        if timer_stopped:
+            break;
+
+        # if timer_on and not timer_paused:
+        if timer_on:
             latest_time = time.time()
 
             time_to_subtract = round((latest_time - last_paused), 3)
@@ -192,16 +291,18 @@ def runTimer():
                 hours_left -= 1
 
             time_display.configure(
-                text=f"{hours_left} : {minutes_left} : {seconds_left}"
+                text=f"{hours_left:02d} : {minutes_left:02d} : {seconds_left:02d}"
             )
 
+    if not timer_stopped:
+        if config["notify"]:
+            showNotification()
+        if config["sound"]:
+            playBuzzer()
     timer_on = False
+    timer_stopped = False
     play_button.config(text="Play")
-
-    if config["notify"]:
-        showNotification()
-    if config["sound"]:
-        playBuzzer()
+    edit_timer_button.configure(state=NORMAL)
 
 
 def setAlwaysOnTop():
@@ -209,6 +310,7 @@ def setAlwaysOnTop():
 
 
 setAlwaysOnTop()
+
 
 # WINDOWS
 def createManagerWindow(saveTimer, current_mins, current_secs, current_hrs):
@@ -524,7 +626,7 @@ def createSettingsWindow():
                 label.configure(text="Enter a number above 0")
             elif reason == "wv-2":
                 entry.state(["invalid"])
-                label.configure(text="Enter a number above -1")
+                label.configure(text="Enter a number above or equal to 0")
             elif reason == "sound":
                 entry.state(["invalid"])
                 label.configure(text="This file doesnt exist.")
@@ -536,9 +638,9 @@ def createSettingsWindow():
             if not void < 60:
                 validated = False
                 Error("wv", default_secs_entry, dse_error_lbl)
-            if not void > 0:
-                validated = False
-                Error("wv-", default_secs_entry, dse_error_lbl)
+            # if not void > 0:
+            #     validated = False
+            #     Error("wv-", default_secs_entry, dse_error_lbl)
         except ValueError:
             Error("not_int", default_secs_entry, dse_error_lbl)
             validated = False
@@ -567,6 +669,10 @@ def createSettingsWindow():
             Error("not_int", default_hours_entry, dhe_error_lbl)
             validated = False
 
+        if validated and int(default_hours_entry.get()) == 0 and int(default_mins_entry.get()) == 0 and int(default_secs_entry.get()) == 0:
+            validated = False
+            Error("wv-", default_secs_entry, dse_error_lbl)
+
         sp = sound_path_entry.get()
         sp = sp.replace("\\", "/")
 
@@ -589,8 +695,8 @@ def createSettingsWindow():
             index, text="Cancel", command=lambda: settings_window.destroy()
         ).place(x=125, y=230)
 
-    if not system() == "Windows" or system() == "win":
-        notify_button.configure(state=DISABLED)
+    # if not system() == "Windows" or system() == "win":
+    #     notify_button.configure(state=DISABLED)
 
     def reset_dse(e):
         default_secs_entry.state(["!invalid"])
@@ -626,10 +732,16 @@ def createSettingsWindow():
 
 
 # KEYBINDS
-app.bind("key-space", startstopButtonPressed)
+app.bind("key-space", buttonPressedStartStop)
 
+app.grid_columnconfigure(0, weight=1)
+app.grid_columnconfigure(1, weight=1)
+app.grid_columnconfigure(2, weight=1)
+app.grid_columnconfigure(3, weight=1)
 app.grid_rowconfigure(0, weight=1)
+app.grid_rowconfigure(1, weight=100)
 app.grid_rowconfigure(2, weight=1)
+app.grid_rowconfigure(3, weight=1)
 app.grid_columnconfigure(1, weight=1)
 
 # IMAGES
@@ -646,131 +758,97 @@ time_selected_display = tkinter.Label(
     font=("Segoe UI Variable", 10),
     fg="white",
 )
-time_selected_display.grid(column=1, row=0, sticky="N", pady=10)
+time_selected_display.grid(row=0, column=0, columnspan=4)
 
 time_display = tkinter.Label(
     master=app,
-    text=f"{timer_hours} : {timer_minutes} : {timer_seconds}",
+    text=f"{timer_hours:02d} : {timer_minutes:02d} : {timer_seconds:02d}",
     font=("Segoe UI Variable", 30),
     fg="white",
 )
-time_display.grid(column=1, row=0, sticky="", rowspan=2, pady=20)
+time_display.grid(row=1, column=0, columnspan=4)
 
 play_button = ttk.Button(
     master=app,
     text="Play",
-    width=25,
-    command=startstopButtonPressed,
+    command=buttonPressedStartStop,
     style="Accent.TButton",
+    padding=1
 )
-play_button.grid(column=1, row=0, sticky="S", rowspan=2)
+play_button.grid(row=2, column=0)
 
-manager_button = ttk.Button(
+reset_button = ttk.Button(
     master=app,
-    text="Edit Timer",
+    text="Reset",
+    command=buttonPressedReset,
+    padding=1
+)
+reset_button.grid(row=2, column=2)
+
+edit_timer_button = ttk.Button(
+    master=app,
+    text="Edit",
     command=lambda: createManagerWindow(
         saveTimer, timer_minutes, timer_seconds, timer_hours
     ),
-    width=25,
+    padding=1
 )
-manager_button.grid(column=1, row=2, sticky="N", pady=10)
+edit_timer_button.grid(row=2, column=1)
 
 settings_btn = ttk.Button(
     master=app,
     image=settings_image_dark,
     command=lambda: createSettingsWindow(),
     style="Toolbutton",
+    padding=0
 )
+settings_btn.grid(row=2, column=3)
+
+fast1_button = ttk.Button(
+    master=app,
+    text="5'",
+    command=buttonPressedFast1,
+    padding=1
+)
+fast1_button.grid(row=3, column=0)
+fast2_button = ttk.Button(
+    master=app,
+    text="25'",
+    command=buttonPressedFast2,
+    padding=1
+)
+fast2_button.grid(row=3, column=1)
+fast3_button = ttk.Button(
+    master=app,
+    text="10'",
+    command=buttonPressedFast3,
+    padding=1
+)
+fast3_button.grid(row=3, column=2)
+fast4_button = ttk.Button(
+    master=app,
+    text="15'",
+    command=buttonPressedFast4,
+    padding=1
+)
+fast4_button.grid(row=3, column=3)
 
 
 def sizechanged(e):
-    settings_btn.place(x=5, y=app.winfo_height() - 45)
-    if app.winfo_height() >= 220:
-        if app.winfo_height() > 250:
-            if app.winfo_height() > 270:
-                if app.winfo_height() > 290:
-                    if app.winfo_height() > 330:
-                        if app.winfo_height() > 350:
-                            if app.winfo_height() > 370:
-                                if app.winfo_height() > 390:
-                                    if app.winfo_width() > 420:
-                                        time_display.configure(
-                                            font=("Segoe UI Variable", 100)
-                                        )
-                                        time_selected_display.configure(
-                                            font=("Segoe UI Variable", 25)
-                                        )
-                            else:
-                                if app.winfo_width() > 420:
-                                    time_display.configure(
-                                        font=("Segoe UI Variable", 90)
-                                    )
-                                    time_selected_display.configure(
-                                        font=("Segoe UI Variable", 25)
-                                    )
-                        else:
-                            if app.winfo_width() > 400:
-                                time_display.configure(font=("Segoe UI Variable", 80))
-                                time_selected_display.configure(
-                                    font=("Segoe UI Variable", 25)
-                                )
-                    else:
-                        if app.winfo_width() > 360:
-                            time_display.configure(font=("Segoe UI Variable", 70))
-                            time_selected_display.configure(
-                                font=("Segoe UI Variable", 23)
-                            )
-                else:
-                    if app.winfo_width() > 360:
-                        time_display.configure(font=("Segoe UI Variable", 60))
-                        time_selected_display.configure(font=("Segoe UI Variable", 20))
-            else:
-                if app.winfo_width() >= 300:
-                    time_display.configure(font=("Segoe UI Variable", 50))
-                    time_selected_display.configure(font=("Segoe UI Variable", 17))
-        else:
-            if app.winfo_width() >= 300:
-                time_display.configure(font=("Segoe UI Variable", 40))
-                time_selected_display.configure(font=("Segoe UI Variable", 13))
-    else:
-        time_display.configure(font=("Segoe UI Variable", 30))
-        time_selected_display.configure(font=("Segoe UI Variable", 10))
+    # settings_btn.place(x=5, y=app.winfo_height() - 45)
 
-    play_button.configure(width=int(app.winfo_width() / 12))
-    manager_button.configure(width=int(app.winfo_width() / 12))
+    time_selected_display.configure(font=("Segoe UI Variable", int(app.winfo_width() / 40)))
+    time_display.configure(font=("Segoe UI Variable", int(app.winfo_width() / 9)))
 
-
-def makeWindowsBlur():
-    from sys import getwindowsversion
-
-    if getwindowsversion().build >= 22000:
-        from win32mica import MICAMODE, ApplyMica
-
-        app.wm_attributes("-transparent", bg_color)
-        app.update()
-        if theme == "Dark":
-            ApplyMica(
-                HWND=ctypes.windll.user32.GetParent(app.winfo_id()),
-                ColorMode=MICAMODE.DARK,
-            )
-        else:
-            ApplyMica(
-                HWND=ctypes.windll.user32.GetParent(app.winfo_id()),
-                ColorMode=MICAMODE.LIGHT,
-            )
-    else:
-        from BlurWindow.blurWindow import GlobalBlur
-
-        app.wm_attributes("-transparent", bg_color)
-        if theme == "Dark":
-            GlobalBlur(
-                ctypes.windll.user32.GetParent(app.winfo_id()),
-                Acrylic=True,
-                hexColor="#1c1c1c",
-                Dark=True,
-            )
-        else:
-            pass
+    # play_button.configure(width=int(app.winfo_width() / 15))
+    # edit_timer_button.configure(width=int(app.winfo_width() / 15))
+    play_button.configure(width=int(app.winfo_width() / 30))
+    edit_timer_button.configure(width=int(app.winfo_width() / 30))
+    reset_button.configure(width=int(app.winfo_width() / 30))
+    fast1_button.configure(width=int(app.winfo_width() / 30))
+    fast2_button.configure(width=int(app.winfo_width() / 30))
+    fast3_button.configure(width=int(app.winfo_width() / 30))
+    fast4_button.configure(width=int(app.winfo_width() / 30))
 
 
 # LOAD IMAGES
@@ -803,12 +881,6 @@ elif theme == "Light":
     settings_btn.configure(image=settings_image_light)
     time_display.configure(fg="black")
     time_selected_display.configure(fg="black")
-
-if system() == "Windows":
-    makeWindowsBlur()
-    prev_state = app.state()
-    print(prev_state)
-    # app.bind("<Expose>", fullredraw)
 
 app.bind("<Configure>", sizechanged)
 
