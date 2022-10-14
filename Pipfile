@@ -1,0 +1,21 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+cx-freeze = "*"
+darkdetect = "*"
+tk = "*"
+sv-ttk = "*"
+pre-commit = "*"
+commitizen = "*"
+requests = "*"
+playsound = "*"
+notify2 = "==0.3.1"
+pyautogui = "==0.9.53"
+
+[dev-packages]
+
+[requires]
+python_version = "3.10"
