@@ -112,9 +112,9 @@ def stopTimerAndSetNewValue(hours: int, minutes: int, seconds: int):
 
     saveConfig(config)
 
-    timer_seconds = hours
+    timer_hours = hours
     timer_minutes = minutes
-    timer_hours = seconds
+    timer_seconds = seconds
 
     hours_left = timer_hours
     minutes_left = timer_minutes
