@@ -891,7 +891,7 @@ app.wait_visibility()
 app.attributes("-alpha", config["transperency"])
 
 # UPDATE
-app.after(500, Thread(target=checkForUpdates, args=(ver,)).start)
+#app.after(500, Thread(target=checkForUpdates, args=(ver,)).start)
 
 # TKINTER MAINLOOP
 app.mainloop()
