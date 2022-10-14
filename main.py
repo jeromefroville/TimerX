@@ -239,7 +239,7 @@ def showNotification():
 
 
 def runTimer():
-    global timer_seconds, timer_minutes, timer_hours, timer_on, app, config, last_paused, seconds_left, minutes_left, hours_left, timer_stopped
+    global timer_seconds, timer_minutes, timer_hours, timer_on, app, config, last_paused, seconds_left, minutes_left, hours_left, timer_stopped, time_display
 
     # timer_seconds = config["default_seconds"]
     # timer_minutes = config["default_minutes"]
@@ -303,6 +303,9 @@ def runTimer():
     timer_stopped = False
     play_button.config(text="Play")
     edit_timer_button.configure(state=NORMAL)
+
+    time_display.configure(text=f"{config['default_hours']:02d} : {config['default_minutes']:02d} : {config['default_seconds']:02d}")
+
 
 
 def setAlwaysOnTop():
